@@ -42,6 +42,9 @@ sudo ./relay.py --all_on
 # Turn relay channel 7 on
 sudo ./relay.py --on 7
 
+# Turn relay channel 9 off with debug output
+sudo ./relay.py -v --off 7
+
 # Turn off relay channels 8, 9, 11, and 12 simultaneously
 sudo ./relay.py --off 8 9 11 12
 
