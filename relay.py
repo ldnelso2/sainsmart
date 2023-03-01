@@ -286,6 +286,8 @@ if __name__ == "__main__":
         parser.exit(1)
 
     args = parser.parse_args()
-    print(args)
+
+    if args.verbose:
+        print(args)
 
     main(args)

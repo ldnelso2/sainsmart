@@ -7,7 +7,49 @@ Some of the Sainsmart 16-channel relays have a HID compatible chip.  This one is
 
 SKU: 101-70-208
 
+## Quickstart
+### Setup
+The Python USB libraries are needed for this project. On Linux they can be installed with:
+```
+sudo apt-get install python3-usb
+```
+Or alternatively with pip:
+```
+python3 pip install pyusb
+```
 
+### CLI Usage
+```
+$ ./relay.py
+usage: relay.py [-h] [--on ON [ON ...]] [--off OFF [OFF ...]] [--all_on] [--all_off] [-t] [-v]
+
+Simple CLI program to control Sainsmart 16 Channel relay boards.
+
+optional arguments:
+  -h, --help           show this help message and exit
+  --on ON [ON ...]     Relay number to enable. Can be presented as a list (--on 6 9 11).
+  --off OFF [OFF ...]  Relay number to disable. Can be presented as a list (--off 4 2 10).
+  --all_on             Enable all relays.
+  --all_off            Disable all relays.
+  -t, --test_pattern   Runs wheel test pattern on relays.
+  -v, --verbose        Enable verbose outputs.
+```
+#### Examples
+```
+# Turns all relays on
+sudo ./relay.py --all_on
+
+# Turn relay channel 7 on
+sudo ./relay.py --on 7
+
+# Turn off relay channels 8, 9, 11, and 12 simultaneously
+sudo ./relay.py --off 8 9 11 12
+
+# Run fun relay test pattern
+sudo ./relay.py -t
+````
+
+## Overview
 Overall good:
 
     Low price
@@ -34,7 +76,7 @@ What was learned in the process:
     -If encoded as a string literal, pyusb likes a format with slashes in it.  I think it is best to store commands as tuples of decimal value ints and send like that.
     -Python 3 converted hex characters automatically to integer value decimals.  The board took both, but there are potential for errors because a hex value provided by sainsmart (0x0A stripping the 0x) that looks like 0A would be imported as a string and 0x30 would be imported as an int and sometimes as a float.  Then the float creates other problems for string parsing.
 
-# How to use it: 
+## Underlying Library Usage:
 1. You may need to install certain dependencies and/or libraries for pyusb (YMMV)
 
 2. The hex commands from the Sainsmart wiki page are converted to decimals and in an indexed list.
@@ -46,6 +88,4 @@ Relay Number X 2 + 1 = turn off that relay
 For example, 
 > ep.write(ss_cont[12])     # turns off relay number 6
 > ep.write(ss_cont[13])     # would turn off relay number 6  
-
-
 
