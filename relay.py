@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # This is for a Sainsmart USB 16-channel relay
 # SKU: http://wiki.sainsmart.com/index.php/101-70-208
 # The wiki link gives serial commands
@@ -16,30 +18,12 @@
 # Adapted from RJ's gitgist https://gist.github.com/RJ/7acba5b06a03c9b521601e08d0327d56
 # ... and pyusb tutorial:  https://github.com/pyusb/pyusb
 
+import sys
 import time
 import usb.core
 import usb.util
+import argparse
 
-dev = usb.core.find(idVendor=0x1a86, idProduct=0x7523, find_all=True)
-
-if dev is None:
-	raise ValueError("Device not found")
-
-if dev.is_kernel_driver_active(0):
-	dev.detach_kernel_driver(0)
-
-cfg = dev.get_active_configuration()
-intf = cfg[(0,0)]
-
-ep = usb.util.find_descriptor(
-    intf,
-    # match the first OUT endpoint
-    custom_match = \
-    lambda e: \
-        usb.util.endpoint_direction(e.bEndpointAddress) == \
-        usb.util.ENDPOINT_OUT)
-
-assert ep is not None
 
 close_relay_cmd = [0xA0, 0x01, 0x01, 0xA2]
 open_relay_cmd = [0xA0, 0x01, 0x00, 0xA1]
@@ -120,7 +104,7 @@ ss_cont = [[58, 70, 69, 48, 49, 48, 48, 48, 48, 48, 48, 49, 48, 70, 49, 13, 10],
  [58, 70, 69, 48, 70, 48, 48, 48, 48, 48, 48, 49, 48, 48, 50, 48, 48, 48, 48, 69, 49, 13, 10]]
 
 
-# Not really necessary, but just to be save, here is the control index, and now we have it in github
+# Not really necessary, but just to be safe, here is the control index, and now we have it in github
 ss_control_list = ['Status',
  'Status-Return',
  '1-CH ON',
@@ -158,3 +142,152 @@ ss_control_list = ['Status',
  'All ON',
  'All OFF']
 
+
+class RelayDevice(object):
+    """Sainsmart 16 Channel Relay Device"""
+
+    ep_dev = None
+    verbose = False
+
+    def __init__(self, find_all=False):
+        dev = usb.core.find(idVendor=0x1a86, idProduct=0x7523, find_all=find_all)
+
+        if dev is None:
+            raise ValueError("Device not found")
+
+        if dev.is_kernel_driver_active(0):
+            dev.detach_kernel_driver(0)
+
+        cfg = dev.get_active_configuration()
+        intf = cfg[(0,0)]
+
+        ep = usb.util.find_descriptor(
+            intf,
+            # match the first OUT endpoint
+            custom_match = \
+            lambda e: \
+                usb.util.endpoint_direction(e.bEndpointAddress) == \
+                usb.util.ENDPOINT_OUT)
+
+        assert ep is not None
+        self.ep_dev = ep
+
+    def get_relay_command_index(self, relay_number, state="on"):
+        relay_val = ss_cont[-1] # All off
+
+        if relay_number <= 16 and relay_number > 0:
+            if state == "on":
+                relay_val = (relay_number * 2)
+            elif state == "off":
+                relay_val = (relay_number * 2) + 1
+            else:
+                print(f"Warning, invalid state: {state}")
+        else:
+            print(f"Warning, relay value out of range [1-16]: {relay_number}")
+
+        return relay_val
+
+    def all_channels_on(self):
+        if self.verbose:
+            print("Enabling all relays.")
+        self.ep_dev.write(ss_cont[-2])
+        time.sleep(0.1)
+
+    def all_channels_off(self):
+        if self.verbose:
+            print("Disabling all relays.")
+        self.ep_dev.write(ss_cont[-1])
+        time.sleep(0.1)
+
+    def on(self, relay_number):
+        relay_index = self.get_relay_command_index(int(relay_number), "on")
+        if relay_index == ss_cont[-1]:
+            print("Can not execute command.")
+            return
+
+        if self.verbose:
+            print(f"Enabling relay #:  {relay_number}")
+
+        self.ep_dev.write(ss_cont[relay_index])
+
+    def off(self, relay_number):
+        relay_index = self.get_relay_command_index(int(relay_number), "off")
+        if relay_index == ss_cont[-1]:
+            print("Can not execute command.")
+            return
+
+        if self.verbose:
+            print(f"Disabling relay #: {relay_number}")
+
+        self.ep_dev.write(ss_cont[relay_index])
+
+    def test_pattern(self, cycles=3):
+        cycle_count=0
+
+        self.all_channels_off()
+        while(cycle_count < cycles):
+            for idx in range(1,17):
+                self.on(idx)
+                time.sleep(0.1)
+            for idx in range(0,16):
+                self.off(16-idx)
+                time.sleep(0.1)
+            cycle_count += 1
+
+
+def main(args):
+    relay_dev = RelayDevice()
+    if relay_dev.ep_dev is None:
+        print("Failed to initialize relay board.")
+        exit(2)
+
+    if args.verbose:
+        relay_dev.verbose = True
+
+    if args.test_pattern:
+        relay_dev.test_pattern()
+        exit(0)
+
+    if args.all_off:
+        relay_dev.all_channels_off()
+        exit(0)
+
+    if args.all_on:
+        relay_dev.all_channels_on()
+        exit(0)
+
+    if args.on is not None:
+        for relay in args.on:
+            if args.verbose:
+                print(f"Relay: {relay}")
+            relay_dev.on(relay)
+
+    if args.off is not None:
+        for relay in args.off:
+            if args.verbose:
+                print(f"Relay: {relay}")
+            relay_dev.off(relay)
+
+    exit(0)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Simple CLI program to control Sainsmart 16 Channel relay boards.")
+    parser.add_argument("--on", nargs="+", required=False, help="Relay number to enable. Can be presented as a list (--on 6 9 11).")
+    parser.add_argument("--off", nargs="+", required=False, help="Relay number to disable. Can be presented as a list (--off 4 2 10).")
+    parser.add_argument("--all_on", action="store_true", required=False, help="Enable all relays.")
+    parser.add_argument("--all_off", action="store_true", required=False, help="Disable all relays.")
+    parser.add_argument("-t", "--test_pattern", action="store_true", required=False, help="Runs wheel test pattern on relays.")
+    parser.add_argument("-v", "--verbose", action="store_true", required=False, help="Enable verbose outputs.")
+
+    # No args given
+    if len(sys.argv) == 1:
+        parser.print_help()
+        parser.exit(1)
+
+    args = parser.parse_args()
+
+    if args.verbose:
+        print(args)
+
+    main(args)
